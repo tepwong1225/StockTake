@@ -17,8 +17,8 @@
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; height:100%; background:var(--bg); color:var(--txt);
     font-family:'Segoe UI',Roboto,'Noto Sans Thai',Arial,sans-serif;
-    overscroll-behavior:none; user-select:none;}
-  #app{display:flex; flex-direction:column; height:100vh; max-width:520px; margin:0 auto;}
+    overscroll-behavior:none; user-select:none; position:fixed; inset:0; width:100%;}
+  #app{display:flex; flex-direction:column; height:100dvh; height:100vh; max-width:520px; margin:0 auto; overflow:hidden;}
   header{background:var(--navy); padding:14px 16px; display:flex; align-items:center;
     justify-content:space-between; border-bottom:3px solid var(--orange); flex:0 0 auto;}
   header .brand{font-weight:800; font-size:16px;}
@@ -128,8 +128,13 @@
 
     <div id="scanScreen" style="display:none;">
       <div class="panel scan-box">
-        <label>ยิงบาร์โค้ด หรือพิมพ์แล้ว Enter</label>
-        <input id="skuInput" autocomplete="off" autocapitalize="off" inputmode="text" placeholder="พร้อมยิง..." />
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <label style="margin:0;">ยิงบาร์โค้ด หรือพิมพ์แล้ว Enter</label>
+          <button type="button" id="modeToggleBtn" onclick="toggleInputMode()"
+            style="font-size:11px; padding:4px 10px; border-radius:20px; border:1px solid var(--orange); background:transparent; color:var(--orange);">โหมดสแกน</button>
+        </div>
+        <input id="skuInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+          inputmode="none" placeholder="พร้อมยิง..." />
       </div>
 
       <div class="not-found" id="notFound">ไม่พบรหัสนี้ในฐานข้อมูล — บันทึกเป็นรายการตรวจสอบแล้ว (ดูในแดชบอร์ด)</div>
@@ -166,6 +171,14 @@
         <button class="save-btn" id="saveBtn" onclick="saveCount()">บันทึกจำนวนที่นับ</button>
       </div>
 
+      <div class="recent">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin:18px 0 8px;">
+          <h3 style="margin:0;">รายการที่บันทึก (เครื่องนี้)</h3>
+          <div style="font-size:13px; font-weight:800; color:var(--orange);">รวม <span id="recentSumQty">0</span> ชิ้น</div>
+        </div>
+        <div id="recentList"></div>
+      </div>
+
       <div class="panel">
         <div class="footer-actions">
           <button class="ghost-btn" onclick="manualSync()">Sync ตอนนี้</button>
@@ -175,11 +188,6 @@
           <button class="ghost-btn" onclick="changeZoneQuick()">เปลี่ยนโซน</button>
           <button class="ghost-btn" onclick="backToBranch()">เปลี่ยนสาขา/ผู้นับ</button>
         </div>
-      </div>
-
-      <div class="recent">
-        <h3>รายการล่าสุดที่บันทึก (เครื่องนี้)</h3>
-        <div id="recentList"></div>
       </div>
     </div>
 
@@ -433,6 +441,40 @@ function updateNetStatus(){
 window.addEventListener('online', updateNetStatus);
 window.addEventListener('offline', updateNetStatus);
 
+/* ===== โหมดสแกน vs พิมพ์เอง ===== */
+let scanMode = true; // true = ปิดคีย์บอร์ดในจอ (รอรับจากเครื่องสแกนจริง), false = พิมพ์เองได้
+function toggleInputMode(){
+  scanMode = !scanMode;
+  const el = document.getElementById('skuInput');
+  const btn = document.getElementById('modeToggleBtn');
+  if (scanMode){
+    el.setAttribute('inputmode', 'none');
+    btn.textContent = 'โหมดสแกน';
+    btn.style.color = 'var(--orange)';
+    btn.style.borderColor = 'var(--orange)';
+  } else {
+    el.setAttribute('inputmode', 'text');
+    btn.textContent = 'โหมดพิมพ์เอง';
+    btn.style.color = 'var(--green)';
+    btn.style.borderColor = 'var(--green)';
+  }
+  el.blur();
+  setTimeout(() => el.focus(), 50);
+}
+
+/* เผื่อเครื่องสแกนบางรุ่นไม่ส่ง Enter มาด้วย: ตรวจจับอัตโนมัติเมื่อพิมพ์/ยิงครบความยาวบาร์โค้ดแล้วหยุดนิ่ง */
+let autoScanTimer = null;
+function watchAutoScan(value){
+  clearTimeout(autoScanTimer);
+  if (value.length >= 12){
+    autoScanTimer = setTimeout(() => {
+      if (document.getElementById('skuInput').value === value && value.length >= 12){
+        handleScan(value.trim());
+      }
+    }, 150);
+  }
+}
+
 function focusScan(){
   const el = document.getElementById('skuInput');
   if (!el) return;
@@ -442,10 +484,20 @@ function focusScan(){
 
 /* ===== Scan / lookup (offline, from embedded MASTER_MAP) ===== */
 document.addEventListener('keydown', function(e){
-  const el = document.getElementById('skuInput');
-  if (!el || document.getElementById('scanScreen').style.display === 'none') return;
-  if (document.activeElement !== el) return;
-  if (e.key === 'Enter'){ e.preventDefault(); handleScan(el.value.trim()); }
+  const skuEl = document.getElementById('skuInput');
+  const qtyEl = document.getElementById('qtyInput');
+  if (document.getElementById('scanScreen').style.display === 'none') return;
+  if (e.key !== 'Enter' && e.keyCode !== 13) return;
+
+  if (document.activeElement === skuEl && skuEl){
+    e.preventDefault(); clearTimeout(autoScanTimer); handleScan(skuEl.value.trim());
+  } else if (document.activeElement === qtyEl && qtyEl &&
+             document.getElementById('productCard').classList.contains('show')){
+    e.preventDefault(); saveCount();
+  }
+});
+document.addEventListener('input', function(e){
+  if (e.target && e.target.id === 'skuInput') watchAutoScan(e.target.value.trim());
 });
 
 async function handleScan(raw){
@@ -673,19 +725,98 @@ async function exportFile(){
 async function loadRecent(){
   const all = await dbAll();
   const branchCode = state.branch.code || state.branch.CODE;
-  const mine = all.filter(r => r.branch === branchCode && r.device === state.device)
-    .sort((a,b) => b.ts - a.ts).slice(0, 15);
+  const mine = all.filter(r => r.branch === branchCode && r.device === state.device);
+
+  const sumQty = mine.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  document.getElementById('recentSumQty').textContent = sumQty.toLocaleString('en-US');
+
+  // รวมรายการที่บาร์โค้ดซ้ำกันเข้าด้วยกัน
+  const grouped = {};
+  mine.forEach(r => {
+    if (!grouped[r.barcode]){
+      grouped[r.barcode] = {
+        barcode: r.barcode, name: r.name, zone: r.zone, qty: 0,
+        lastTs: r.ts, allSynced: true, recordIds: []
+      };
+    }
+    const g = grouped[r.barcode];
+    g.qty += Number(r.qty) || 0;
+    if (r.ts > g.lastTs) { g.lastTs = r.ts; g.zone = r.zone; }
+    if (!r.synced) g.allSynced = false;
+    g.recordIds.push(r.id);
+  });
+
   const list = document.getElementById('recentList');
   list.innerHTML = '';
-  mine.forEach(r => {
+  const groupsArr = Object.values(grouped).sort((a,b) => b.lastTs - a.lastTs).slice(0, 20);
+  if (groupsArr.length === 0){
+    list.innerHTML = '<div style="font-size:11px; color:var(--txt-dim); text-align:center; padding:14px 0;">ยังไม่มีรายการ</div>';
+    return;
+  }
+  groupsArr.forEach(g => {
     const div = document.createElement('div');
     div.className = 'recent-item';
-    const time = new Date(r.ts).toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'});
-    div.innerHTML = `<div><div class="rname">${r.name}</div>
-      <div class="rmeta">${r.barcode} · ${r.zone || '-'} · ${time}</div></div>
-      <div><span class="rqty">x${r.qty}</span><span class="dot ${r.synced ? 'synced' : 'pending'}"></span></div>`;
+    div.style.cursor = 'pointer';
+    const time = new Date(g.lastTs).toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'});
+    div.innerHTML = `<div><div class="rname">${g.name}</div>
+      <div class="rmeta">${g.barcode} · ${g.zone || '-'} · ${time}</div></div>
+      <div><span class="rqty">x${g.qty}</span><span class="dot ${g.allSynced ? 'synced' : 'pending'}"></span></div>`;
+    div.onclick = () => editGroupedItem(g.barcode);
     list.appendChild(div);
   });
+}
+
+async function editGroupedItem(barcode){
+  const all = await dbAll();
+  const branchCode = state.branch.code || state.branch.CODE;
+  const records = all.filter(r => r.barcode === barcode && r.branch === branchCode && r.device === state.device);
+  if (records.length === 0) return;
+
+  const currentTotal = records.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const sample = records[records.length - 1];
+  const choice = prompt(
+    `"${sample.name}"\nยอดรวมปัจจุบัน: ${currentTotal}${records.length > 1 ? ` (จาก ${records.length} ครั้งที่ยิง)` : ''}\n\nพิมพ์ยอดรวมใหม่เพื่อแก้ไข หรือพิมพ์ 0 เพื่อลบทั้งหมด:`,
+    currentTotal
+  );
+  if (choice === null) return;
+  const newQty = parseInt(choice, 10);
+  if (isNaN(newQty) || newQty < 0){ showToast('กรอกจำนวนให้ถูกต้อง', true); return; }
+
+  const db = await dbPromise;
+  const allUnsynced = records.every(r => !r.synced);
+
+  if (allUnsynced){
+    // ยังไม่ sync สักรายการ — ลบทั้งหมดแล้วสร้างใหม่ก้อนเดียว สะอาด ไม่ทิ้งร่องรอย
+    const tx = db.transaction('counts', 'readwrite');
+    const store = tx.objectStore('counts');
+    records.forEach(r => store.delete(r.id));
+    if (newQty > 0){
+      store.add({
+        branch: sample.branch, device: sample.device, zone: sample.zone,
+        barcode: sample.barcode, stockcd: sample.stockcd, name: sample.name,
+        color: sample.color, size: sample.size, qty: newQty,
+        ts: Date.now(), synced: false, source: 'live_sync', unmatched: !!sample.unmatched
+      });
+    }
+    showToast(newQty === 0 ? 'ลบรายการแล้ว' : `แก้ไขเป็น x${newQty} แล้ว`);
+  } else {
+    // มีบางรายการ sync ไปแล้ว — บันทึกเป็นส่วนต่าง เก็บประวัติไว้ ไม่ทับของเดิม
+    const delta = newQty - currentTotal;
+    if (delta !== 0){
+      await dbAdd({
+        branch: sample.branch, device: sample.device, zone: sample.zone,
+        barcode: sample.barcode, stockcd: sample.stockcd,
+        name: sample.name + (newQty === 0 ? ' (ลบรายการ)' : ' (แก้ไขจากเครื่อง)'),
+        color: sample.color, size: sample.size, qty: delta,
+        ts: Date.now(), synced: false, source: 'live_sync', unmatched: !!sample.unmatched
+      });
+      showToast(newQty === 0 ? 'บันทึกการลบแล้ว (รอ sync)' : `บันทึกการแก้ไขเป็น x${newQty} แล้ว (รอ sync)`);
+    }
+  }
+
+  refreshPendingLabel();
+  loadRecent();
+  if (navigator.onLine) trySync();
 }
 
 function showToast(msg, isError){

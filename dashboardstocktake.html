@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>แดชบอร์ดนับสต็อก | Body Glove TH</title>
+<style>
+  :root{
+    --navy:#0b2540; --orange:#ff6a1a; --green:#1fae5c; --red:#e23b3b;
+    --bg:#0e1620; --card:#16232f; --line:#243240; --txt:#eef3f7; --txt-dim:#8ea0b3;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--txt); font-family:'Segoe UI',Roboto,'Noto Sans Thai',Arial,sans-serif;}
+  header{background:var(--navy); padding:18px 24px; border-bottom:3px solid var(--orange);
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+  header h1{font-size:18px; margin:0; font-weight:800;}
+  header h1 span{color:var(--orange);}
+  main{max-width:1100px; margin:0 auto; padding:20px;}
+  .row{display:flex; gap:16px; flex-wrap:wrap; margin-bottom:20px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; flex:1; min-width:220px;}
+  .card h3{margin:0 0 4px; font-size:13px; color:var(--txt-dim); font-weight:500;}
+  .card .big{font-size:28px; font-weight:800;}
+  .big.warn{color:var(--orange);}
+  .big.danger{color:var(--red);}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:20px;}
+  .panel h2{margin:0 0 6px; font-size:16px;}
+  .panel p{color:var(--txt-dim); font-size:13px; margin:0 0 14px;}
+  .drop{border:2px dashed var(--line); border-radius:12px; padding:30px; text-align:center; color:var(--txt-dim);
+    cursor:pointer; font-size:14px;}
+  .drop.drag{border-color:var(--orange); color:var(--orange);}
+  select, input{background:#0c1a28; color:var(--txt); border:1px solid var(--line); border-radius:8px;
+    padding:8px 12px; font-size:13px;}
+  button{background:var(--orange); color:#1a0d04; border:none; border-radius:8px; padding:10px 18px;
+    font-weight:700; font-size:13px; cursor:pointer;}
+  button.ghost{background:transparent; border:1px solid var(--line); color:var(--txt);}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{text-align:left; color:var(--txt-dim); font-weight:600; padding:8px; border-bottom:1px solid var(--line); font-size:12px;}
+  td{padding:8px; border-bottom:1px solid var(--line);}
+  tr:hover td{background:#0c1a28;}
+  .diff-pos{color:var(--green); font-weight:700;}
+  .diff-neg{color:var(--red); font-weight:700;}
+  .diff-zero{color:var(--txt-dim);}
+  .tag{font-size:10px; padding:2px 8px; border-radius:20px; background:#0c1a28; color:var(--txt-dim);}
+  .toolbar{display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center;}
+  .toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--green);
+    color:#06210f; padding:10px 18px; border-radius:30px; font-weight:700; font-size:14px; opacity:0;
+    transition:opacity .25s; z-index:50;}
+  .toast.show{opacity:1;}
+  .empty{color:var(--txt-dim); font-size:13px; text-align:center; padding:30px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>STOCK<span>TAKE</span> Dashboard</h1>
+  <div style="font-size:12px; color:var(--txt-dim);">Body Glove Thailand — นับสต็อกแบบ Real-time</div>
+</header>
+
+<main>
+
+  <div class="panel" id="homePanel">
+    <h2>Summary การนับสต็อกประจำเดือน</h2>
+    <p id="homeMonthLabel">สรุปยอดและผลขาด/เกินของแต่ละสาขาที่นับในเดือนนี้ คลิกแถวเพื่อดู DIFF ละเอียด</p>
+    <div class="row" style="margin-bottom:14px;">
+      <div class="card"><h3>สาขาที่นับเดือนนี้</h3><div class="big" id="homeBranchCount">-</div></div>
+      <div class="card"><h3>SKU ที่นับรวม</h3><div class="big" id="homeSkuCount">-</div></div>
+      <div class="card"><h3>มูลค่าสต็อกระบบรวม</h3><div class="big" id="homeStockValue">-</div></div>
+      <div class="card"><h3>ส่วนต่างมูลค่ารวม</h3><div class="big warn" id="homeDifValue">-</div></div>
+    </div>
+    <div class="toolbar">
+      <input id="homeSearch" placeholder="ค้นหารหัส/ชื่อสาขา..." oninput="renderBranchTable()" style="flex:1; min-width:160px;" />
+      <select id="homeSort" onchange="renderBranchTable()">
+        <option value="diff">เรียงตาม: ผลนับ (ขาดมากสุดก่อน)</option>
+        <option value="value">เรียงตาม: มูลค่าส่วนต่าง</option>
+        <option value="code">เรียงตาม: รหัสสาขา</option>
+        <option value="recent">เรียงตาม: นับล่าสุด</option>
+      </select>
+      <button class="ghost" onclick="loadBranchStatus()">รีเฟรช</button>
+    </div>
+    <div id="branchTableWrap"><div class="empty">กดรีเฟรชเพื่อโหลด Summary เดือนนี้</div></div>
+  </div>
+
+  <div class="panel" id="diffSection" style="display:none;">
+    <div class="toolbar" style="margin-bottom:4px;">
+      <button class="ghost" onclick="backToHome()">‹ กลับหน้าแรก</button>
+      <h2 style="margin:0; flex:1;" id="diffSectionTitle">รายงาน DIFF</h2>
+      <button class="ghost" style="border-color:var(--red); color:var(--red);" onclick="closeRound()">ปิดรอบนับ (เก็บประวัติ)</button>
+    </div>
+
+    <div style="background:#0c1a28; border:1px solid var(--line); border-radius:12px; padding:16px; margin:14px 0;">
+      <h2 style="font-size:14px;">อัปโหลดยอดคงเหลือตั้งต้น (Balance) ของสาขานี้</h2>
+      <p>อัปโหลด "ก่อน" เริ่มนับเสมอ — รองรับไฟล์ Export จาก Goldsoft ได้ตรงๆ (.xlsx ที่มีคอลัมน์ STOCKCD, COLOR_CODE, SIZE_CODE, QOH) หรือไฟล์ .csv แบบง่าย (BARCODE12,QTY) — อัปโหลดซ้ำได้ ระบบแทนที่ยอดเดิมของสาขานี้ให้อัตโนมัติ ไม่ซ้ำซ้อน</p>
+      <div class="drop" id="balanceDropZone" style="padding:18px;">ลากไฟล์ยอดคงเหลือ (.xlsx หรือ .csv) มาวาง หรือคลิกเพื่อเลือกไฟล์</div>
+      <input type="file" id="balanceFileInput" accept=".csv,.xlsx,.xls" style="display:none;" />
+      <div id="balanceUploadLog" style="margin-top:8px; font-size:12px; color:var(--txt-dim);"></div>
+    </div>
+
+    <div id="reportHeader" style="background:#0c1a28; border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:14px; font-size:12px; display:none;">
+      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;">
+        <div><span style="color:var(--txt-dim);">เลขที่นับ:</span> <b id="rhTakingNo">-</b></div>
+        <div><span style="color:var(--txt-dim);">วันที่นับล่าสุด:</span> <b id="rhDate">-</b></div>
+        <div><span style="color:var(--txt-dim);">สถานะ:</span> <b id="rhStatus">-</b></div>
+        <div style="grid-column:span 2;"><span style="color:var(--txt-dim);">สาขา:</span> <b id="rhWarehouse">-</b></div>
+        <div style="grid-column:span 1;"><span style="color:var(--txt-dim);">ผู้นับ (PIC):</span> <b id="rhPic">-</b></div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <select id="branchFilter" onchange="loadSummary()"><option value="">ทุกสาขา</option></select>
+      <select id="diffFilter" onchange="renderTable()">
+        <option value="all">แสดงทั้งหมด</option>
+        <option value="mismatch">เฉพาะที่ DIFF ≠ 0</option>
+        <option value="over">นับเกิน (DIFF &gt; 0)</option>
+        <option value="under">นับขาด (DIFF &lt; 0)</option>
+      </select>
+      <input id="searchBox" placeholder="ค้นหาชื่อ/รหัส..." oninput="renderTable()" />
+      <button class="ghost" onclick="loadSummary()">รีเฟรช</button>
+      <button onclick="exportDiffCsv()">Export CSV (ฟอร์แมต Goldsoft)</button>
+    </div>
+    <div id="tableWrap"><div class="empty">กดรีเฟรชเพื่อโหลดข้อมูลล่าสุดจากระบบ</div></div>
+
+    <div style="margin-top:20px;">
+      <h2>สินค้าที่ยังไม่ได้นับ — มีสต็อก <span id="pendingStockBadge" style="font-size:12px; color:var(--orange);"></span></h2>
+      <p>เทียบจากยอด Balance ที่อัปโหลดไว้ รายการเหล่านี้ยังไม่มีใครยิงสแกนเลย ควรรีบไปนับให้ครบก่อนปิดรอบ</p>
+      <div id="pendingStockWrap"><div class="empty">ยังไม่มีข้อมูล</div></div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <h2>สินค้าไม่มีสต็อก (QOH = 0) <span id="pendingNoStockBadge" style="font-size:12px; color:var(--txt-dim);"></span></h2>
+      <p>ยอดในระบบเป็น 0 อยู่แล้ว ไม่จำเป็นต้องนับ แสดงไว้เพื่อให้รู้</p>
+      <div id="pendingNoStockWrap"><div class="empty">ยังไม่มีข้อมูล</div></div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <h2>อัปโหลดไฟล์จากเครื่อง Handheld (โหมดออฟไลน์)</h2>
+      <p>ลากไฟล์ .json ที่ export จากแอพมือถือมาวางที่นี่ ระบบจะส่งเข้า Google Sheets เดียวกับที่เครื่อง Sync อัตโนมัติ ไม่ซ้ำกัน</p>
+      <div class="drop" id="dropZone">ลากไฟล์ .json มาวางตรงนี้ หรือคลิกเพื่อเลือกไฟล์</div>
+      <input type="file" id="fileInput" accept=".json" multiple style="display:none;" />
+      <div id="uploadLog" style="margin-top:10px; font-size:12px; color:var(--txt-dim);"></div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <h2>รายการสแกนไม่พบรหัสสินค้า</h2>
+      <p>บาร์โค้ดที่ยิงแล้วไม่ตรงกับ Master ข้อมูลสินค้า — ต้องตรวจสอบว่าเป็นสินค้าใหม่หรือยิงผิด</p>
+      <div id="unmatchedWrap"><div class="empty">ยังไม่มีข้อมูล</div></div>
+    </div>
+  </div>
+
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ===== CONFIG ===== */
+const API_URL = "https://script.google.com/macros/s/AKfycbzZBpZlmi855ewlWodYLXTNjUWj6jZeYxjTNvENSOqZ7jHKkjGROX8-2_Wm1sPPayvv7w/exec";
+
+let summaryData = { items: [], unmatched: [], stats: {} };
+let branchStatusData = [];
+
+function fmtDate(iso){
+  if (!iso) return '-';
+  const d = new Date(iso);
+  const today = new Date();
+  const isToday = d.toDateString() === today.toDateString();
+  if (isToday) return 'วันนี้ ' + d.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'});
+  return d.toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'numeric'});
+}
+
+async function loadBranchStatus(){
+  if (!API_URL || API_URL.indexOf('PASTE_') === 0){ showToast('ยังไม่ได้ตั้งค่า API_URL', true); return; }
+  try {
+    const res = await fetch(`${API_URL}?action=monthlySummary`);
+    const data = await res.json();
+    branchStatusData = data.branches || [];
+    document.getElementById('homeMonthLabel').textContent = `สรุปยอดและผลขาด/เกินของแต่ละสาขาที่นับในเดือน ${data.month || ''} คลิกแถวเพื่อดู DIFF ละเอียด`;
+    document.getElementById('homeBranchCount').textContent = data.stats.branchesCounted;
+    document.getElementById('homeSkuCount').textContent = fmtNum(data.stats.totalSkuCounted);
+    document.getElementById('homeStockValue').textContent = fmtNum(data.stats.totalStockValue) + ' ฿';
+    const difEl = document.getElementById('homeDifValue');
+    difEl.textContent = (data.stats.totalDifPrice >= 0 ? '+' : '') + fmtNum(data.stats.totalDifPrice) + ' ฿';
+    difEl.className = 'big ' + (data.stats.totalDifPrice < 0 ? 'danger' : (data.stats.totalDifPrice > 0 ? '' : ''));
+    renderBranchTable();
+  } catch(err){ showToast('โหลด Summary ไม่สำเร็จ', true); }
+}
+
+function renderBranchTable(){
+  const q = document.getElementById('homeSearch').value.trim().toLowerCase();
+  const sortBy = document.getElementById('homeSort').value;
+
+  let list = branchStatusData.slice();
+  if (q) list = list.filter(b => b.branch.toLowerCase().includes(q) || (b.name||'').toLowerCase().includes(q));
+
+  if (sortBy === 'code') list.sort((a,b) => a.branch.localeCompare(b.branch));
+  else if (sortBy === 'value') list.sort((a,b) => a.difPrice - b.difPrice);
+  else if (sortBy === 'recent') list.sort((a,b) => new Date(b.lastCount||0) - new Date(a.lastCount||0));
+  else list.sort((a,b) => a.diffQty - b.diffQty); // ผลนับ: ขาดมากสุดก่อน
+
+  const statusLabel = { counting: '● กำลังนับ', done: 'นับเสร็จแล้ว' };
+  const statusClass = { counting: 'diff-pos', done: '' };
+
+  const wrap = document.getElementById('branchTableWrap');
+  if (list.length === 0){ wrap.innerHTML = '<div class="empty">ยังไม่มีสาขาไหนนับในเดือนนี้</div>'; return; }
+
+  let html = '<div style="overflow-x:auto;"><table style="white-space:nowrap;"><thead><tr>'
+    + '<th>รหัสสาขา</th><th>ชื่อสาขา</th><th>สถานะ</th><th>นับล่าสุด</th><th>SKU</th>'
+    + '<th>สต็อกระบบ (ชิ้น)</th><th>นับได้ (ชิ้น)</th><th>DiffQty</th>'
+    + '<th>มูลค่าระบบ (฿)</th><th>มูลค่านับได้ (฿)</th><th>ส่วนต่าง (฿)</th><th></th>'
+    + '</tr></thead><tbody>';
+  list.forEach(b => {
+    const diffClass = b.diffQty > 0 ? 'diff-pos' : (b.diffQty < 0 ? 'diff-neg' : 'diff-zero');
+    const priceClass = b.difPrice > 0 ? 'diff-pos' : (b.difPrice < 0 ? 'diff-neg' : 'diff-zero');
+    html += `<tr style="cursor:pointer;" onclick="openBranch('${b.branch}')">
+      <td>${b.branch}</td><td>${b.name}</td>
+      <td><span class="${statusClass[b.status]}">${statusLabel[b.status]}</span></td>
+      <td>${fmtDate(b.lastCount)}</td><td>${b.skuCount}</td>
+      <td>${fmtNum(b.totalStockQty)}</td><td>${fmtNum(b.totalActualQty)}</td>
+      <td class="${diffClass}">${b.diffQty > 0 ? '+' : ''}${fmtNum(b.diffQty)}</td>
+      <td>${fmtNum(b.totalStockValue)}</td><td>${fmtNum(b.totalActualValue)}</td>
+      <td class="${priceClass}">${b.difPrice > 0 ? '+' : ''}${fmtNum(b.difPrice)}</td>
+      <td style="color:var(--orange);">ดูรายละเอียด ›</td></tr>`;
+  });
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+}
+
+function openBranch(code){
+  document.getElementById('homePanel').style.display = 'none';
+  document.getElementById('diffSection').style.display = 'block';
+  document.getElementById('branchFilter').value = code;
+  const b = branchStatusData.find(x => x.branch === code);
+  document.getElementById('diffSectionTitle').textContent = `รายงาน DIFF — ${code}${b ? ' · ' + b.name : ''}`;
+  loadSummary();
+}
+function backToHome(){
+  document.getElementById('diffSection').style.display = 'none';
+  document.getElementById('homePanel').style.display = 'block';
+}
+
+async function loadSummary(){
+  if (!API_URL || API_URL.indexOf('PASTE_') === 0){ showToast('ยังไม่ได้ตั้งค่า API_URL', true); return; }
+  const branch = document.getElementById('branchFilter').value;
+  try {
+    const res = await fetch(`${API_URL}?action=summary${branch ? '&branch='+encodeURIComponent(branch) : ''}`);
+    summaryData = await res.json();
+    document.getElementById('statCounted') && (document.getElementById('statCounted').textContent = summaryData.stats.totalCounted ?? 0);
+    if (summaryData.header){
+      document.getElementById('reportHeader').style.display = 'block';
+      document.getElementById('rhTakingNo').textContent = summaryData.header.takingNo;
+      document.getElementById('rhDate').textContent = summaryData.header.takingDate;
+      document.getElementById('rhStatus').textContent = summaryData.header.statusName;
+      document.getElementById('rhWarehouse').textContent = `${summaryData.header.warehouseName} - ${summaryData.header.warehouseNameTh}`;
+      document.getElementById('rhPic').textContent = summaryData.header.pic || '-';
+    }
+    renderTable();
+    renderUnmatched();
+    renderPending();
+  } catch(err){ showToast('โหลดข้อมูลไม่สำเร็จ', true); }
+}
+
+async function loadBranches(){
+  if (!API_URL || API_URL.indexOf('PASTE_') === 0) return;
+  try {
+    const res = await fetch(`${API_URL}?action=branches`);
+    const branches = await res.json();
+    const sel = document.getElementById('branchFilter');
+    branches.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.code; opt.textContent = `${b.code} - ${b.name}`;
+      sel.appendChild(opt);
+    });
+  } catch(err){}
+}
+
+let renderedItems = [];
+const fmtNum = n => Math.round(n).toLocaleString('en-US');
+
+function renderTable(){
+  const filter = document.getElementById('diffFilter').value;
+  const q = document.getElementById('searchBox').value.trim().toLowerCase();
+  let items = summaryData.items || [];
+  if (filter === 'mismatch') items = items.filter(i => i.diffQty !== 0);
+  if (filter === 'over') items = items.filter(i => i.diffQty > 0);
+  if (filter === 'under') items = items.filter(i => i.diffQty < 0);
+  if (q) items = items.filter(i => (i.itemName||'').toLowerCase().includes(q) || (i.barcode||'').includes(q) || (i.itemCode||'').includes(q));
+  renderedItems = items.slice(0, 500);
+
+  const wrap = document.getElementById('tableWrap');
+  if (items.length === 0){ wrap.innerHTML = '<div class="empty">ไม่พบรายการ</div>'; return; }
+
+  const h = summaryData.header || {};
+  let html = '<div style="overflow-x:auto;"><table style="white-space:nowrap;"><thead><tr>'
+    + '<th>ItemCode</th><th>ItemName</th><th>UnitPrice</th>'
+    + '<th>Color</th><th>ColorName</th><th>Size</th><th>StockQty</th><th>ActualQty</th><th>DiffQty</th>'
+    + '<th>Tot_Stock</th><th>Tot_Actual</th><th>Dif_Price</th><th>Notes</th><th></th>'
+    + '</tr></thead><tbody>';
+  renderedItems.forEach((i, idx) => {
+    const diffClass = i.diffQty > 0 ? 'diff-pos' : (i.diffQty < 0 ? 'diff-neg' : 'diff-zero');
+    const diffText = (i.diffQty > 0 ? '+' : '') + fmtNum(i.diffQty);
+    const priceClass = i.difPrice > 0 ? 'diff-pos' : (i.difPrice < 0 ? 'diff-neg' : 'diff-zero');
+    const priceText = (i.difPrice > 0 ? '+' : '') + fmtNum(i.difPrice);
+    html += `<tr>
+      <td>${i.itemCode}</td><td>${i.itemName}</td><td>${fmtNum(i.unitPrice)}</td>
+      <td>${i.color}</td><td>${i.colorName}</td><td>${i.size}</td>
+      <td>${fmtNum(i.stockQty)}</td><td id="actualQty_${idx}">${fmtNum(i.actualQty)}</td>
+      <td class="${diffClass}">${diffText}</td>
+      <td>${fmtNum(i.totStock)}</td><td>${fmtNum(i.totActual)}</td>
+      <td class="${priceClass}">${priceText}</td>
+      <td style="color:var(--txt-dim);">${i.zones||''}</td>
+      <td><button class="ghost" style="padding:4px 10px; font-size:11px;" onclick="adjustQty(${idx})">ปรับยอด</button></td></tr>`;
+  });
+
+  const totals = renderedItems.reduce((acc, i) => {
+    acc.stockQty += i.stockQty; acc.actualQty += i.actualQty; acc.diffQty += i.diffQty;
+    acc.totStock += i.totStock; acc.totActual += i.totActual; acc.difPrice += i.difPrice;
+    return acc;
+  }, { stockQty: 0, actualQty: 0, diffQty: 0, totStock: 0, totActual: 0, difPrice: 0 });
+  const totDiffClass = totals.diffQty > 0 ? 'diff-pos' : (totals.diffQty < 0 ? 'diff-neg' : 'diff-zero');
+  const totPriceClass = totals.difPrice > 0 ? 'diff-pos' : (totals.difPrice < 0 ? 'diff-neg' : 'diff-zero');
+  html += `<tr style="font-weight:700; background:#0c1a28;">
+    <td colspan="6" style="text-align:right;">รวมทั้งหมด (${renderedItems.length} รายการ)</td>
+    <td>${fmtNum(totals.stockQty)}</td><td>${fmtNum(totals.actualQty)}</td>
+    <td class="${totDiffClass}">${totals.diffQty > 0 ? '+' : ''}${fmtNum(totals.diffQty)}</td>
+    <td>${fmtNum(totals.totStock)}</td><td>${fmtNum(totals.totActual)}</td>
+    <td class="${totPriceClass}">${totals.difPrice > 0 ? '+' : ''}${fmtNum(totals.difPrice)}</td>
+    <td></td><td></td></tr>`;
+  html += '</tbody></table></div>';
+  if (items.length > 500) html += `<div class="empty">แสดง 500 จาก ${items.length} รายการ — ใช้ค้นหาเพื่อกรอง</div>`;
+  wrap.innerHTML = html;
+}
+
+async function closeRound(){
+  const branch = document.getElementById('branchFilter').value;
+  if (!branch){ showToast('กรุณาเลือกสาขาก่อน', true); return; }
+  const sure = confirm(`ปิดรอบนับของสาขา ${branch}?\n\nข้อมูลที่นับทั้งหมดของสาขานี้จะถูกย้ายไปเก็บเป็นประวัติแยก (ไม่ได้ลบทิ้ง) แล้วล้างตารางหลักให้พร้อมเริ่มรอบนับใหม่\n\nควร Export CSV เก็บไว้ก่อนกดยืนยันนะครับ`);
+  if (!sure) return;
+  if (!API_URL || API_URL.indexOf('PASTE_') === 0){ showToast('ยังไม่ได้ตั้งค่า API_URL', true); return; }
+  try {
+    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'archiveBranch', branch: branch }) });
+    const result = await res.json();
+    if (result.ok){
+      showToast(`ปิดรอบนับแล้ว (เก็บ ${result.archived} รายการไว้ใน ${result.archiveSheet || 'ประวัติ'})`);
+      backToHome();
+      loadBranchStatus();
+    } else {
+      showToast('ปิดรอบนับไม่สำเร็จ', true);
+    }
+  } catch(err){ showToast('เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง', true); }
+}
+
+async function adjustQty(idx){
+  const item = renderedItems[idx];
+  if (!item) return;
+  const input = prompt(`ปรับยอดนับของ "${item.itemName}" (${item.colorName} / ${item.size})\nยอดปัจจุบัน: ${item.actualQty}\nกรอกยอดนับใหม่ (หลังทวนสอบ):`, item.actualQty);
+  if (input === null) return;
+  const newQty = parseInt(input, 10);
+  if (isNaN(newQty) || newQty < 0){ showToast('กรอกจำนวนให้ถูกต้อง', true); return; }
+  const delta = newQty - item.actualQty;
+  if (delta === 0) return;
+
+  if (!API_URL || API_URL.indexOf('PASTE_') === 0){ showToast('ยังไม่ได้ตั้งค่า API_URL', true); return; }
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'submitBatch',
+        rows: [{
+          branch: item.branch, device: 'แดชบอร์ด (ปรับยอด)', zone: 'ปรับยอดจากการทวนสอบ',
+          barcode: item.barcode, stockcd: item.itemCode, name: item.itemName,
+          color: item.colorName, size: item.size, qty: delta, source: 'manual_adjustment'
+        }]
+      })
+    });
+    const result = await res.json();
+    if (result.ok){
+      showToast(`ปรับยอดเป็น ${newQty} แล้ว (${delta > 0 ? '+' : ''}${delta})`);
+      loadSummary();
+    } else {
+      showToast('ปรับยอดไม่สำเร็จ', true);
+    }
+  } catch(err){ showToast('เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง', true); }
+}
+
+function renderUnmatched(){
+  const wrap = document.getElementById('unmatchedWrap');
+  const list = summaryData.unmatched || [];
+  if (list.length === 0){ wrap.innerHTML = '<div class="empty">ไม่มีรายการตกค้าง</div>'; return; }
+  let html = '<table><thead><tr><th>บาร์โค้ดที่สแกน</th><th>สาขา</th><th>จำนวน</th></tr></thead><tbody>';
+  list.forEach(u => {
+    html += `<tr><td>${u.barcode}</td><td><span class="tag">${u.branch}</span></td><td>${u.qty}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function renderPending(){
+  const withStock = summaryData.pendingWithStock || [];
+  const noStock = summaryData.pendingNoStock || [];
+
+  document.getElementById('pendingStockBadge').textContent = withStock.length ? `(${withStock.length} รายการ)` : '';
+  document.getElementById('pendingNoStockBadge').textContent = noStock.length ? `(${noStock.length} รายการ)` : '';
+
+  const wsWrap = document.getElementById('pendingStockWrap');
+  if (withStock.length === 0){
+    wsWrap.innerHTML = '<div class="empty">ครบแล้ว ไม่มีรายการตกหล่น</div>';
+  } else {
+    let html = '<table><thead><tr><th>ItemCode</th><th>ItemName</th><th>Color/Size</th><th>StockQty</th></tr></thead><tbody>';
+    withStock.slice(0, 300).forEach(p => {
+      html += `<tr><td>${p.itemCode}</td><td>${p.itemName}</td><td>${p.colorName||''} / ${p.size||''}</td><td class="diff-neg">${fmtNum(p.stockQty)}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    if (withStock.length > 300) html += `<div class="empty">แสดง 300 จาก ${withStock.length} รายการ</div>`;
+    wsWrap.innerHTML = html;
+  }
+
+  const nsWrap = document.getElementById('pendingNoStockWrap');
+  if (noStock.length === 0){
+    nsWrap.innerHTML = '<div class="empty">ไม่มีรายการ</div>';
+  } else {
+    let html = '<table><thead><tr><th>ItemCode</th><th>ItemName</th><th>Color/Size</th><th>StockQty</th></tr></thead><tbody>';
+    noStock.slice(0, 300).forEach(p => {
+      html += `<tr><td>${p.itemCode}</td><td>${p.itemName}</td><td>${p.colorName||''} / ${p.size||''}</td><td style="color:var(--txt-dim);">0</td></tr>`;
+    });
+    html += '</tbody></table>';
+    if (noStock.length > 300) html += `<div class="empty">แสดง 300 จาก ${noStock.length} รายการ</div>`;
+    nsWrap.innerHTML = html;
+  }
+}
+
+function exportDiffCsv(){
+  const items = summaryData.items || [];
+  if (items.length === 0){ showToast('ยังไม่มีข้อมูลให้ export', true); return; }
+  const h = summaryData.header || {};
+  let csv = 'TakingNo,TakingDate,Remark,WarehouseName,WarehouseNameTh,LocationName,ShelfCode,StatusName,Remark1,ItemCode,ItemName,UnitPrice,Color,ColorName,Size,StockQty,ActualQty,DiffQty,Tot_Stock,Tot_Actual,Dif_Price,Notes,PIC\n';
+  items.forEach(i => {
+    csv += `${h.takingNo||''},${h.takingDate||''},,${i.branch},${h.warehouseNameTh||''},หน้าร้าน,,${h.statusName||''},,`
+      + `${i.itemCode},${i.itemName},${i.unitPrice},${i.color},${i.colorName},${i.size},${i.stockQty},${i.actualQty},${i.diffQty},`
+      + `${i.totStock},${i.totActual},${i.difPrice},${i.zones||''},${h.pic||''}\n`;
+  });
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${h.takingNo || 'stocktaking'}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* ===== File upload (offline export merge) ===== */
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+dropZone.onclick = () => fileInput.click();
+dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag'); };
+dropZone.ondragleave = () => dropZone.classList.remove('drag');
+dropZone.ondrop = (e) => {
+  e.preventDefault(); dropZone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+};
+fileInput.onchange = () => handleFiles(fileInput.files);
+
+async function handleFiles(files){
+  const log = document.getElementById('uploadLog');
+  for (const file of files){
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const rows = data.rows || [];
+      if (!API_URL || API_URL.indexOf('PASTE_') === 0){
+        log.innerHTML += `<div>${file.name}: ${rows.length} แถว (ยังไม่ได้ตั้งค่า API — ไม่ได้ส่งขึ้นระบบ)</div>`;
+        continue;
+      }
+      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'submitBatch', rows: rows }) });
+      const result = await res.json();
+      log.innerHTML += `<div>${file.name}: อัปโหลดสำเร็จ ${result.saved || 0} แถว</div>`;
+    } catch(err){
+      log.innerHTML += `<div style="color:var(--red)">${file.name}: ไฟล์ไม่ถูกต้อง</div>`;
+    }
+  }
+  showToast('อัปโหลดเสร็จแล้ว');
+  loadSummary();
+}
+
+/* ===== Balance upload (baseline ก่อนนับ) ===== */
+const balanceDropZone = document.getElementById('balanceDropZone');
+const balanceFileInput = document.getElementById('balanceFileInput');
+balanceDropZone.onclick = () => balanceFileInput.click();
+balanceDropZone.ondragover = (e) => { e.preventDefault(); balanceDropZone.classList.add('drag'); };
+balanceDropZone.ondragleave = () => balanceDropZone.classList.remove('drag');
+balanceDropZone.ondrop = (e) => { e.preventDefault(); balanceDropZone.classList.remove('drag'); handleBalanceFile(e.dataTransfer.files[0]); };
+balanceFileInput.onchange = () => handleBalanceFile(balanceFileInput.files[0]);
+
+async function handleBalanceFile(file){
+  if (!file) return;
+  const log = document.getElementById('balanceUploadLog');
+  const branch = document.getElementById('branchFilter').value;
+  if (!branch){ log.innerHTML = '<span style="color:var(--red)">กรุณาเลือกสาขาก่อน</span>'; return; }
+  try {
+    let headerCols, dataLines;
+    const isExcel = /\.xlsx?$/i.test(file.name);
+
+    if (isExcel){
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+      headerCols = (aoa[0] || []).map(c => String(c).trim().toUpperCase());
+      dataLines = aoa.slice(1).map(r => r.map(c => String(c)));
+    } else {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      headerCols = lines[0].split(',').map(c => c.trim().toUpperCase());
+      dataLines = lines.slice(1).map(l => l.split(','));
+    }
+
+    let rows;
+    if (headerCols.includes('STOCKCD') && headerCols.includes('QOH')) {
+      // ฟอร์แมตดิบจาก Goldsoft: BRHCD,BRHNM,STOCKCD,STOCK_NAME,WSELPRC,COLOR_CODE,COLOR_NAME,SIZE_CODE,QOH,TOTSELPRC
+      const idx = {
+        stockcd: headerCols.indexOf('STOCKCD'), color: headerCols.indexOf('COLOR_CODE'),
+        size: headerCols.indexOf('SIZE_CODE'), qoh: headerCols.indexOf('QOH')
+      };
+      rows = dataLines.map(c => {
+        const stockcd = (c[idx.stockcd] || '').trim().padStart(8, '0');
+        const color = (c[idx.color] || '0').trim().padStart(2, '0');
+        const size = (c[idx.size] || '0').trim().padStart(2, '0');
+        return { barcode: stockcd + color + size, qty: Number((c[idx.qoh] || '0').trim()) || 0 };
+      }).filter(r => r.barcode.length === 12);
+    } else if (headerCols.includes('BARCODE12')) {
+      const idx = { barcode: headerCols.indexOf('BARCODE12'), qty: headerCols.indexOf('QTY') };
+      rows = dataLines.map(c => ({ barcode: (c[idx.barcode]||'').trim(), qty: Number((c[idx.qty]||'0').trim()) || 0 }))
+        .filter(r => r.barcode);
+    } else {
+      // ฟอร์แมตง่ายไม่มีหัวตาราง: BARCODE12,QTY ต่อบรรทัด
+      rows = [headerCols.join(','), ...dataLines.map(c => c.join(','))].map(l => {
+        const [barcode, qty] = l.split(',');
+        return { barcode: (barcode||'').trim(), qty: Number((qty||'0').trim()) || 0 };
+      }).filter(r => r.barcode);
+    }
+
+    if (!API_URL || API_URL.indexOf('PASTE_') === 0){
+      log.innerHTML = `${file.name}: อ่านได้ ${rows.length} แถว (ยังไม่ได้ตั้งค่า API — ไม่ได้ส่งขึ้นระบบ)`;
+      return;
+    }
+    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'uploadBalance', branch: branch, rows: rows }) });
+    const result = await res.json();
+    log.innerHTML = result.ok
+      ? `อัปโหลดสำเร็จ ${result.inserted} แถว สำหรับสาขา ${branch}`
+      : `<span style="color:var(--red)">อัปโหลดไม่สำเร็จ</span>`;
+    showToast('อัปโหลดยอดคงเหลือตั้งต้นแล้ว');
+    loadSummary();
+  } catch(err){
+    log.innerHTML = `<span style="color:var(--red)">${file.name}: ไฟล์ไม่ถูกต้อง (${err.message || err})</span>`;
+  }
+}
+
+function showToast(msg, isError){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isError ? 'var(--red)' : 'var(--green)';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+loadBranches();
+loadBranchStatus();
+</script>
+</body>
+</html>

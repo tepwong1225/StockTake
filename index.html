@@ -51,12 +51,10 @@
   .stat .lbl{font-size:11px; color:var(--txt-dim);}
   .stat .val{font-size:20px; font-weight:800; margin-top:2px;}
   .stat.warn .val{color:var(--orange);}
-  .qty-row{display:flex; align-items:center; gap:10px; margin-bottom:14px;}
-  .qty-btn{width:44px; height:44px; border-radius:10px; border:none; background:var(--navy-2);
-    color:var(--txt); font-size:22px; font-weight:800;}
-  .qty-btn:active{background:var(--orange-dim);}
-  #qtyInput{flex:1; min-width:0; text-align:center; font-size:22px; font-weight:800; padding:8px;
-    border-radius:10px; border:2px solid var(--line); background:#0c1a28; color:var(--txt); box-sizing:border-box;}
+  .qty-row{display:flex; align-items:center; margin-bottom:14px;}
+  #qtyInput{width:100%; text-align:center; font-size:28px; font-weight:800; padding:10px;
+    border-radius:10px; border:2px solid var(--orange); background:#0c1a28; color:var(--txt);
+    box-sizing:border-box; -webkit-user-select:none;}
   .save-btn{width:100%; padding:16px; font-size:18px; font-weight:800; border:none;
     border-radius:12px; background:var(--orange); color:#1a0d04;}
   .save-btn:active{background:var(--orange-dim);}
@@ -158,17 +156,8 @@
           <div class="stat"><div class="lbl">นับแล้วสะสม</div><div class="val" id="cCountedQty">0</div></div>
           <div class="stat warn" id="cRemainStat"><div class="lbl" id="cRemainLbl">คงเหลือ</div><div class="val" id="cRemainQty">-</div></div>
         </div>
-
-        <div style="font-size:11px; color:var(--txt-dim); margin:-8px 0 8px;">รวมทั้งรุ่น (ทุกสี/ไซส์)</div>
-        <div class="stat-row">
-          <div class="stat"><div class="lbl">ยอดระบบ</div><div class="val" id="mSystemQty">-</div></div>
-          <div class="stat"><div class="lbl">นับแล้วสะสม</div><div class="val" id="mCountedQty">0</div></div>
-          <div class="stat warn" id="mRemainStat"><div class="lbl" id="mRemainLbl">คงเหลือ</div><div class="val" id="mRemainQty">-</div></div>
-        </div>
         <div class="qty-row">
-          <button class="qty-btn" onclick="stepQty(-1)">−</button>
-          <input id="qtyInput" type="number" inputmode="numeric" value="1" />
-          <button class="qty-btn" onclick="stepQty(1)">+</button>
+          <input id="qtyInput" type="number" inputmode="none" value="1" readonly onfocus="this.removeAttribute('readonly')" />
         </div>
         <button class="save-btn" id="saveBtn" onclick="saveCount()">บันทึกจำนวนที่นับ</button>
       </div>
@@ -498,18 +487,33 @@ function focusScan(){
 /* ===== Scan / lookup (offline, from embedded MASTER_MAP) ===== */
 document.addEventListener('keydown', function(e){
   const skuEl = document.getElementById('skuInput');
+  const qtyEl = document.getElementById('qtyInput');
   if (document.getElementById('scanScreen').style.display === 'none') return;
-  if (e.key !== 'Enter' && e.keyCode !== 13) return;
 
   const cardShowing = document.getElementById('productCard').classList.contains('show');
 
-  if (document.activeElement === skuEl && skuEl){
-    e.preventDefault();
-    clearTimeout(autoScanTimer);
-    if (cardShowing) saveCount();
-    else handleScan(skuEl.value.trim());
-  } else if (document.activeElement === document.getElementById('qtyInput') && cardShowing){
-    e.preventDefault(); saveCount();
+  if (e.key === 'Enter' || e.keyCode === 13){
+    if (document.activeElement === skuEl){
+      e.preventDefault();
+      clearTimeout(autoScanTimer);
+      if (cardShowing) saveCount();
+      else handleScan(skuEl.value.trim());
+    } else if (cardShowing){
+      e.preventDefault(); saveCount();
+    }
+    return;
+  }
+
+  // รับตัวเลขจากแป้นกายภาพเข้าช่องจำนวน เมื่อการ์ดสินค้าโชว์อยู่
+  if (cardShowing && document.activeElement !== skuEl){
+    if (e.key >= '0' && e.key <= '9'){
+      const cur = qtyEl.value;
+      qtyEl.value = (cur === '1' && e.key !== '0') || cur === '0' ? e.key : cur + e.key;
+      e.preventDefault();
+    } else if (e.key === 'Backspace' || e.key === 'Delete'){
+      qtyEl.value = qtyEl.value.slice(0, -1) || '0';
+      e.preventDefault();
+    }
   }
 });
 document.addEventListener('input', function(e){
